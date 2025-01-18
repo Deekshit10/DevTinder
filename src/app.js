@@ -1,6 +1,10 @@
 const express = require("express");
 
+const bcrypt = require("bcrypt");
+
 const connectdb = require("./config/database.js");
+
+const { validateSignupdata } = require("./utils/validate.js");
 
 const User = require("./model/user.js");
 
@@ -9,8 +13,18 @@ const app = express();
 app.use(express.json());
 
 app.post("/signup", async (req, res) => {
-  const user = new User(req.body);
+  const { firstName, lastName, email, password } = req.body;
   try {
+    validateSignupdata(req);
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword,
+    });
     await user.save();
     res.send("new user data storeed in database");
   } catch (error) {
@@ -18,11 +32,31 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-app.get("/user", async (req, res) => {
-  const userFirstname = req.body.firstName;
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
   try {
-    const user = await User.find({ firstName: userFirstname });
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      throw new Error("Invalid credentials");
+    }
+    const isvalidPassword = await bcrypt.compare(password, user.password);
+    if (isvalidPassword) {
+      res.send("login Successfull");
+    } else {
+      throw new Error("Invalid credentials");
+    }
+  } catch (error) {
+    res.status(400).send("Error: " + error.message);
+  }
+});
+
+app.get("/user", async (req, res) => {
+  const userEmail = req.body.email;
+
+  try {
+    const user = await User.find({ firstName: userEmail });
     if (!user) {
       res.send("user not found");
     } else {
@@ -65,7 +99,6 @@ app.patch("/user/:userId", async (req, res) => {
       allowedUpdates.includes(k)
     );
     if (!isallowed) {
-      console.log("inside isallowed");
       throw new Error("update not allowed");
     }
     if (data.skills?.length > 10) {
@@ -82,10 +115,7 @@ app.patch("/user/:userId", async (req, res) => {
 });
 connectdb()
   .then(() => {
-    console.log("Database connected succesfully");
-    app.listen(3000, () => {
-      console.log("app listening on port 3000");
-    });
+    app.listen(3000, () => {});
   })
   .catch((err) => {
     console.log(err);
